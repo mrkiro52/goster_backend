@@ -1,4 +1,3 @@
-// service/user/service.go
 package user
 
 import (
@@ -28,11 +27,11 @@ type RegisterRequest struct {
 }
 
 func (s *Service) Register(ctx context.Context, req *RegisterRequest) (*domain.User, error) {
-	// Создаем контекст с транзакцией
-	txCtx := s.txFactory(ctx)
-	defer txCtx.Rollback() // откатим если что-то пойдет не так
+	// Сервис для регистрации юзера
 
-	// Проверяем существование
+	txCtx := s.txFactory(ctx)
+	defer txCtx.Rollback()
+
 	exists, err := s.userRepo.ExistsByEmail(txCtx, req.Email)
 	if err != nil {
 		return nil, err
@@ -41,13 +40,11 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest) (*domain.U
 		return nil, errors.New("email already registered")
 	}
 
-	// Определяем роль
 	role := req.Role
 	if role != domain.RoleAdmin && role != domain.RoleUser {
 		role = domain.RoleUser
 	}
 
-	// Создаем пользователя
 	user := &domain.User{
 		Email: req.Email,
 		Role:  role,
@@ -61,7 +58,6 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest) (*domain.U
 		return nil, err
 	}
 
-	// Коммитим транзакцию
 	if err := txCtx.Commit(); err != nil {
 		return nil, err
 	}
@@ -70,7 +66,8 @@ func (s *Service) Register(ctx context.Context, req *RegisterRequest) (*domain.U
 }
 
 func (s *Service) Login(ctx context.Context, email, password string) (*domain.User, error) {
-	// Логин без транзакции (только чтение)
+	// Функция для логина юзера
+
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, err

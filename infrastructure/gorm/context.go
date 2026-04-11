@@ -68,3 +68,8 @@ func provideTransactionContext(db *gorm.DB) TransactionContextFactory {
 		return withTransaction(c, db)
 	}
 }
+
+// Добавьте эту функцию в конец файла infrastructure/gorm/context.go
+func WithTransaction(ctx context.Context, db *gorm.DB) *Context {
+	return withTransaction(ctx, db)
+}

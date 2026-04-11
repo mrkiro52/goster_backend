@@ -11,6 +11,7 @@ import (
 )
 
 func ConnectToDb() *gorm.DB {
+	// Функция для создания подключения к бд
 	logger := logging.GetLogger("ConnectToDb")
 
 	db, err := gorm.Open(postgres.Open(config.DBuri), &gorm.Config{})

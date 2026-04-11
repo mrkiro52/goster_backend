@@ -16,7 +16,7 @@ const (
 )
 
 type User struct {
-	ID           uuid.UUID `gorm:"type:uuid, primaryKey"`
+	ID           uuid.UUID `gorm:"type:uuid; primaryKey"`
 	Email        string    `gorm:"uniqueIndex; not null"`
 	Role         string    `gorm:"type:varchar(20);not null; default:user"`
 	PasswordHash string    `gorm:"column:password_hash"`

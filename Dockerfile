@@ -10,7 +10,7 @@ COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -ldflags="-w -s" \
-    -o /build/bin/booking-service \
+    -o /build/bin/goster-service \
     ./cmd/main.go
 
 FROM alpine:latest
@@ -21,9 +21,9 @@ ENV TZ=UTC
 
 WORKDIR /app
 
-COPY --from=builder /build/bin/booking-service /app/booking-service
-RUN chmod +x /app/booking-service
+COPY --from=builder /build/bin/goster-service /app/goster-service
+RUN chmod +x /app/goster-service
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/booking-service"]
+ENTRYPOINT ["/app/goster-service"]
