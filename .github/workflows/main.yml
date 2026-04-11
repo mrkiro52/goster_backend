@@ -1,0 +1,82 @@
+name: Deploy Backend
+on:
+  push:
+    branches: [ main]
+    paths:
+      - 'app/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Add SSH key
+      uses: webfactory/ssh-agent@v0.7.0
+      with:
+        ssh-private-key: ${{ secrets.SERVER_SSH_KEY }}
+
+    - name: Deploy backend via SSH commands
+      run: |
+        # Добавляем хост в known_hosts
+        mkdir -p ~/.ssh
+        ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
+        
+        # Синхронизируем код
+        rsync -avz --delete \
+          --exclude='.git' \
+          --exclude='.env' \
+          --exclude='*.log' \
+          -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.SERVER_PORT || '22' }}" \
+          ./app/ \
+          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:~/celesta/app/
+        
+        # Выполняем деплой
+        ssh -o StrictHostKeyChecking=no \
+            -p ${{ secrets.SERVER_PORT || '22' }} \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        set -e
+        set -x
+        
+        cd ~/celesta
+        
+        # Бэкап
+        if [ -d "app" ]; then
+          tar -czf /tmp/backup-$(date +%Y%m%d-%H%M%S).tar.gz app/
+          echo "Backup created"
+        fi
+        
+        # Деплой
+        echo "=== Building backend ==="
+        docker compose build --pull backend
+        
+        echo "=== Restarting backend ==="
+        docker compose up -d --force-recreate backend
+        
+        echo "=== Health check ==="
+        sleep 10
+        
+        if ! docker ps --filter "name=celesta-backend" --format "{{.Status}}" | grep -q "Up"; then
+          echo "❌ Backend container failed to start"
+          docker logs celesta-backend
+          exit 1
+        fi
+        
+        echo "=== Cleanup ==="
+        docker image prune -f
+        
+        echo "✅ Backend deployed successfully!"
+        EOF
+      
+    - name: Send notification on failure
+      if: failure()
+      run: |
+        ssh -o StrictHostKeyChecking=no \
+            -p ${{ secrets.SERVER_PORT || '22' }} \
+            ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+        cd ~/celesta
+        echo "❌ Deployment failed, checking logs..."
+        docker logs --tail=100 celesta-backend || true
+        EOF
