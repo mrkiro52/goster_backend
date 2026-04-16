@@ -1,7 +1,7 @@
-name: Deploy Backend
+name: Deploy Backend Only
 on:
   push:
-    branches: [ main]
+    branches: [master]
     paths:
       - 'app/**'
 
@@ -24,50 +24,68 @@ jobs:
         mkdir -p ~/.ssh
         ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts
         
-        # Синхронизируем код
+        # Синхронизируем только app директорию
         rsync -avz --delete \
           --exclude='.git' \
-          --exclude='.env' \
           --exclude='*.log' \
+          --exclude='__pycache__' \
+          --exclude='*.pyc' \
           -e "ssh -o StrictHostKeyChecking=no -p ${{ secrets.SERVER_PORT || '22' }}" \
           ./app/ \
-          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:~/celesta/app/
+          ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:~/goster/app/
         
-        # Выполняем деплой
+        # Выполняем деплой на сервере
         ssh -o StrictHostKeyChecking=no \
             -p ${{ secrets.SERVER_PORT || '22' }} \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
         set -e
         set -x
         
-        cd ~/celesta
+        cd ~/goster
         
-        # Бэкап
+        # Бэкап app директории
         if [ -d "app" ]; then
-          tar -czf /tmp/backup-$(date +%Y%m%d-%H%M%S).tar.gz app/
-          echo "Backup created"
+          tar -czf /tmp/app-backup-$(date +%Y%m%d-%H%M%S).tar.gz app/
+          echo "✅ App backup created"
         fi
         
-        # Деплой
-        echo "=== Building backend ==="
-        docker compose build --pull backend
+        # Пересобираем только app сервис
+        echo "=== Building app service ==="
+        docker compose build app
         
-        echo "=== Restarting backend ==="
-        docker compose up -d --force-recreate backend
+        # Перезапускаем только app сервис
+        echo "=== Restarting app service ==="
+        docker compose up -d --no-deps --force-recreate app
         
+        # Health check для app
         echo "=== Health check ==="
         sleep 10
         
-        if ! docker ps --filter "name=celesta-backend" --format "{{.Status}}" | grep -q "Up"; then
-          echo "❌ Backend container failed to start"
-          docker logs celesta-backend
+        if ! docker ps --filter "name=goster_app" --format "{{.Status}}" | grep -q "Up"; then
+          echo "❌ App container failed to start"
+          docker logs goster_app --tail=50
           exit 1
         fi
         
+        # Проверяем что postgres и nginx работают
+        echo "=== Checking other services ==="
+        if ! docker ps --filter "name=goster_postgres" --format "{{.Status}}" | grep -q "Up"; then
+          echo "⚠️ Warning: Postgres is not running!"
+        else
+          echo "✅ Postgres is running"
+        fi
+        
+        if ! docker ps --filter "name=goster_nginx" --format "{{.Status}}" | grep -q "Up"; then
+          echo "⚠️ Warning: Nginx is not running!"
+        else
+          echo "✅ Nginx is running"
+        fi
+        
+        # Очистка старых образов
         echo "=== Cleanup ==="
         docker image prune -f
         
-        echo "✅ Backend deployed successfully!"
+        echo "✅ App deployed successfully! Postgres and Nginx were not affected."
         EOF
       
     - name: Send notification on failure
@@ -76,7 +94,7 @@ jobs:
         ssh -o StrictHostKeyChecking=no \
             -p ${{ secrets.SERVER_PORT || '22' }} \
             ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
-        cd ~/celesta
-        echo "❌ Deployment failed, checking logs..."
-        docker logs --tail=100 celesta-backend || true
+        cd ~/goster
+        echo "❌ Deployment failed, checking app logs..."
+        docker logs --tail=100 goster_app || true
         EOF
