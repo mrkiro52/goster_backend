@@ -19,6 +19,7 @@ type User struct {
 	ID           uuid.UUID `gorm:"type:uuid; primaryKey"`
 	Email        string    `gorm:"uniqueIndex; not null"`
 	Role         string    `gorm:"type:varchar(20);not null; default:user"`
+	Tokens       int       `gorm:"type:int;not null; default:1000"`
 	PasswordHash string    `gorm:"column:password_hash"`
 	CreatedAt    time.Time `gorm:"autoCreateTime"`
 }
